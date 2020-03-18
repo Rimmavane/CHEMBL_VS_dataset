@@ -1,37 +1,7 @@
-import os
 import pandas as pd
 from plotly.subplots import make_subplots
 import plotly.graph_objects as go
-from sklearn.cluster import AgglomerativeClustering
 
-def analog_bias_plotting(analog_bias_folder, tc_threshold=0.75):
-    files = [i for i in os.listdir(analog_bias_folder) if
-             os.path.isfile(os.path.join(analog_bias_folder, i)) and '.csv' in i]
-    dataframes = [pd.read_csv(os.path.join(analog_bias_folder, csv_path), index_col=0) for csv_path in files]
-    print(files)
-
-    def get_mean(dataframe):        ###do poprawy
-        sum = 0
-        num_chembl = len(dataframe)
-        for index, row in dataframe.iterrows():
-            chembl_id1 = index
-            for chembl_id2, similarity_value in row.iteritems():
-                if chembl_id1 != chembl_id2:
-                    sum += similarity_value/2
-                    if similarity_value > 1:
-                        print(chembl_id1, chembl_id2, similarity_value)
-        return sum/num_chembl
-
-    means = [files[i] for i in range(len(dataframes)) if get_mean(dataframes[i])/len(dataframes[i]) > 1]
-
-    def get_clusters(dataframe, threshold):
-        matrix = dataframe.to_numpy()
-        cluster_engine = AgglomerativeClustering(n_clusters=None, distance_threshold=threshold, compute_full_tree=True).fit(matrix)
-        clusters = len(set(cluster_engine.labels_))
-        return clusters
-
-    clusters = [get_clusters(i, tc_threshold)/len(i) for i in dataframes]
-    return means, clusters
 
 def similarity_plotting(csv_path, title='Similarity heatmap', output_name='similarity_heatmap', threshold=0.4, size=None, font_size=dict()):
     main_table = pd.read_csv(csv_path, index_col=0)
@@ -120,7 +90,7 @@ def activities_plotting(csv_path, group, title, output_name, target_col='Name', 
 
 
 def blast_plotting(blast_csv, group, title, output_name, threshold=45, targets_per_plot=20, share_y=False, names=None,
-                   colors=None, size=None, font_size=None, y_title=False, group_legend=None, sort_by=None):
+                   colors=None, size=None, font_size=None, y_title='', group_legend=None, sort_by=None):
     if font_size is None:
         font_size = {'size': 22}
     blast_results = pd.read_csv(blast_csv, index_col=0)
@@ -168,7 +138,7 @@ def blast_plotting(blast_csv, group, title, output_name, threshold=45, targets_p
                                     marker_color=None if colors is None else colors[val_index],
                                     legendgroup=grouping_by_legend, showlegend=leg), row=batch + 1, col=1)
 
-    if y_title:
+    if y_title != '':
         for sub_plot in range(len(targets_ids)):
             fig.update_yaxes(title_text=y_title, col=sub_plot, tickformat="%")
     fig.update_layout(barmode='group', title=go.layout.Title(text=title, xref="paper", x=0.5))
@@ -215,17 +185,17 @@ blast_plotting(blast_csv='chembl_blast_results.csv',
 #                     title='ChEMBL active compounds with Kd, Ki or IC50 standard value for each target.',
 #                     output_name='actives_50', names=['Kd', 'Ki', 'IC50'], colors=['orange', 'blue', 'forestgreen'],
 #                     font_size=dict(size=22),
-#                     targets_per_plot=30,
+#                     targets_per_plot=21,
 #                     share_y='all',
 #                     size=(2000, 3500),
 #                     y_title="Number of compounds")
-#
+
 # activities_plotting(csv_path='actives_number_sampling/targets_after_fingerprint_similarity5_tc0.95.csv',
 #                     group=['Ki_inactive', 'IC50_inactive', 'Kd_inactive'],
 #                     title='ChEMBL inactive compounds with Kd, Ki or IC50 standard value for each target.',
 #                     output_name='inactives_50', names=['Kd', 'Ki', 'IC50'], colors=['orange', 'blue', 'forestgreen'],
 #                     font_size=dict(size=22),
-#                     targets_per_plot=30,
+#                     targets_per_plot=21,
 #                     share_y='all',
 #                     size=(2000, 3500),
 #                     y_title="Number of compounds")
@@ -235,7 +205,7 @@ blast_plotting(blast_csv='chembl_blast_results.csv',
 #                     title='ChEMBL all active and inactive compounds for each target.',
 #                     output_name='both_50', names=['Active', 'Inactive'], colors=['blue', 'grey'],
 #                     font_size=dict(size=22),
-#                     targets_per_plot=30,
+#                     targets_per_plot=21,
 #                     share_y='all',
 #                     size=(2000, 3500),
 #                     y_title="Number of compounds")

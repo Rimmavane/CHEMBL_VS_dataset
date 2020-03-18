@@ -1,10 +1,11 @@
 import pandas as pd
 import os
 from Bio import SeqIO, Align
+import subprocess
 
 # from plotting import similarity_plotting
 from pdb_query import get_pdbs_from_unicode, get_pdb_fasta, check_if_pdb_xray
-import plotly.graph_objects as go
+# import plotly.graph_objects as go
 
 
 def choose_primary_pdb_for_chembl(csv_path):
@@ -28,7 +29,7 @@ def fetch_fastas_for_chembl(csv_path):
     main_table = pd.read_csv(csv_path, index_col=0)
     main_table = main_table[main_table['In_PDBBIND'] == 0]
     print(len(main_table))
-    with open(f'{csv_path.strip(".csv").split("/")[-1]}_fastas.txt', 'w') as handle:
+    with open(f'blast_similarities/{csv_path.strip(".csv").split("/")[-1]}_fastas.txt', 'w') as handle:
         for index, row in main_table.iterrows():
             chembl_name = row['ChEMBL ID']
             pdb_name = row['main_PDB_structure']
@@ -314,7 +315,7 @@ def similarity_plotting(csv_path, threshold, title='Similarity heatmap',
     fig.write_html(output_name + '.html')
     fig.show()
 
-
+# CHOOSE PRIMARY PDB FOR ALL TARGETS
 # chembl_fastas = choose_primary_pdb_for_chembl('actives_number_sampling/targets_after_fingerprint_similarity0_tc0.95.csv')
 # chembl_fastas = choose_primary_pdb_for_chembl('actives_number_sampling/targets_after_fingerprint_similarity1_tc0.95.csv')
 # chembl_fastas = choose_primary_pdb_for_chembl('actives_number_sampling/targets_after_fingerprint_similarity2_tc0.95.csv')
@@ -327,14 +328,24 @@ def similarity_plotting(csv_path, threshold, title='Similarity heatmap',
 # chembl_fastas = choose_primary_pdb_for_chembl('actives_number_sampling/targets_after_fingerprint_similarity9_tc0.95.csv')
 
 
+# GET FASTAS THAT WILL BE USED DURING THE BLAST IN TERMINAL
 # fetch_fastas_for_DEKOIS('DEKOIS2.0_library')
 # fetch_fastas_for_DUDE('DUDE')
 # fetch_fastas_for_pdbbind('pdbbind_ids.txt')
-# fetch_fastas_for_chembl('actives_number_sampling/targets_after_fingerprint_similarity0_tc0.95.csv')
-# load_fasta_sequences('targets_after_fingerprint_similarity10-tc0.95-fastas.txt', 'fastas_from_dude.txt', 'blast_similarities/chembl-dude_blast.txt')
-# load_fasta_sequences('targets_after_fingerprint_similarity10-tc0.95-fastas.txt', 'fastas_from_dekois.txt', 'blast_similarities/chembl-dekois_blast.txt')
-# load_fasta_sequences('targets_after_fingerprint_similarity10-tc0.95-fastas.txt', 'fastas_from_pdbbind.txt', 'blast_similarities/chembl-pdbbind_blast.txt')
 
+# run blasts
+# fetch_fastas_for_chembl('actives_number_sampling/targets_after_fingerprint_similarity5_tc0.95.csv')
+os.chdir('blast_similarities')
+subprocess.call("makeblastdb -in targets_after_fingerprint_similarity5_tc0.95-fastas.txt -dbtype prot", shell=True)
+subprocess.call("blastp -db fastas_from_dude.txt -query targets_after_fingerprint_similarity5_tc0.95-fastas.txt -out chembl-dude_blast.txt -outfmt 10", shell=True)
+subprocess.call("blastp -db fastas_from_dekois.txt -query targets_after_fingerprint_similarity5_tc0.95-fastas.txt -out chembl-dekois_blast.txt -outfmt 10", shell=True)
+subprocess.call("blastp -db fastas_from_pdbbind.txt -query targets_after_fingerprint_similarity5_tc0.95-fastas.txt -out chembl-pdbbind_blast.txt -outfmt 10", shell=True)
+print('Finished BLASTING!')
+load_fasta_sequences('targets_after_fingerprint_similarity5_tc0.95-fastas.txt', 'fastas_from_dude.txt', 'chembl-dude_blast.txt')
+load_fasta_sequences('targets_after_fingerprint_similarity5_tc0.95-fastas.txt', 'fastas_from_dekois.txt', 'chembl-dekois_blast.txt')
+load_fasta_sequences('targets_after_fingerprint_similarity5_tc0.95-fastas.txt', 'fastas_from_pdbbind.txt', 'chembl-pdbbind_blast.txt')
+print('Finished reading BLAST outputs!')
+os.chdir('..')
 # similarity_plotting(csv_path='targets_after_fingerprint_similarity10-tc095-fastas-fastas_from_dekois.csv',
 #                     threshold=95,
 #                     title='Sequence similarity heatmap between CHEMBL targets and DEKOIS ligands.',
