@@ -2,7 +2,7 @@ import pandas as pd
 import os
 from paths_and_settings import *
 from pdb_query import get_pdbs_from_unicode, get_pdb_fasta, check_if_pdb_xray
-from utils import read_fasta
+from utils import read_fasta, log
 from urllib.error import HTTPError
 
 
@@ -23,66 +23,74 @@ def choose_primary_pdb_for_chembl(csv_path):
 
 
 def fetch_fastas_for_chembl(csv_path, output):
-    main_table = pd.read_csv(csv_path, index_col=0)
-    print(f'Downloading fastas for {len(main_table)} targets')
-    with open(output, 'w') as handle:
-        for index, row in main_table.iterrows():
-            chembl_name = row['ChEMBL ID']
-            pdb_name = row['main_PDB_structure']
-            fasta = get_pdb_fasta(row['main_PDB_structure'])
-            handle.write(f'>{chembl_name}-{pdb_name}\n{fasta}\n')
+    if not os.path.exists(output):
+        main_table = pd.read_csv(csv_path, index_col=0)
+        log(f'Downloading fastas for {len(main_table)} targets')
+        with open(output, 'w') as handle:
+            for index, row in main_table.iterrows():
+                chembl_name = row['ChEMBL ID']
+                pdb_name = row['main_PDB_structure']
+                fasta = get_pdb_fasta(row['main_PDB_structure'])
+                handle.write(f'>{chembl_name}-{pdb_name}\n{fasta}\n')
+    else:
+        log(f'{output} already exists!')
 
 
 def fetch_fastas_for_DEKOIS(dekois_dir_path=DEKOIS_PATH):
-    print('Starting fetching FASTA\' s for DEKOIS')
-    dekois_ligands, _ = DEKOIS_uniID_from_folder(dekois_dir_path)
-    dekois_ligands_uni_ids = set()
-    for i in dekois_ligands:
-        try:
-            for k in dekois_ligands[i]['Uniprot_ID'].split():
-                dekois_ligands_uni_ids.add(k)
-        except KeyError:
-            print(f'No Uniprot ID for {i}')
-    with open('fastas_from_dekois.txt', 'w') as handle:
-        for uniprot_id in dekois_ligands_uni_ids:
-            pdb_ids = get_pdbs_from_unicode(uniprot_id)
-            pdbs_dict = dict()
-            for pdb in pdb_ids:
-                try:
-                    if check_if_pdb_xray(pdb):
-                        pdb_fasta = get_pdb_fasta(pdb)
-                        pdbs_dict[uniprot_id + '-' + pdb] = pdb_fasta.strip('"')
-                except HTTPError:
-                    print(f'Failed fetching FASTA sequence for: {pdb}')
-            pdbs_dict2 = dict()
-            for key, value in pdbs_dict.items():
-                if value not in list(pdbs_dict2.values()):
-                    pdbs_dict2[key] = value
-            for key, value in pdbs_dict2.items():
-                handle.write(f'>{key}\n{value}\n')
+    if os.path.exists(os.path.join(dekois_dir_path, 'fastas_from_dekois.txt')):
+        log('Starting fetching FASTA\' s for DEKOIS')
+        dekois_ligands, _ = DEKOIS_uniID_from_folder(dekois_dir_path)
+        dekois_ligands_uni_ids = set()
+        for i in dekois_ligands:
+            try:
+                for k in dekois_ligands[i]['Uniprot_ID'].split():
+                    dekois_ligands_uni_ids.add(k)
+            except KeyError:
+                log(f'No Uniprot ID for {i}')
+        with open('fastas_from_dekois.txt', 'w') as handle:
+            for uniprot_id in dekois_ligands_uni_ids:
+                pdb_ids = get_pdbs_from_unicode(uniprot_id)
+                pdbs_dict = dict()
+                for pdb in pdb_ids:
+                    try:
+                        if check_if_pdb_xray(pdb):
+                            pdb_fasta = get_pdb_fasta(pdb)
+                            pdbs_dict[uniprot_id + '-' + pdb] = pdb_fasta.strip('"')
+                    except HTTPError:
+                        log(f'Failed fetching FASTA sequence for: {pdb}')
+                pdbs_dict2 = dict()
+                for key, value in pdbs_dict.items():
+                    if value not in list(pdbs_dict2.values()):
+                        pdbs_dict2[key] = value
+                for key, value in pdbs_dict2.items():
+                    handle.write(f'>{key}\n{value}\n')
+    else:
+        log('DEKOIS fastas already exists.')
 
 
 def fetch_fastas_for_DUDE(dude_dir_path=DUDE_PATH):
-    print(f'Starting fetching FASTA\'s for DUDE')
-    dude_uni_ids = DUDE_uniID_from_folder(dude_dir_path)
-    with open('fastas_from_dude.txt', 'w') as handle:
-        for uniprot_id in dude_uni_ids:
-            pdb_ids = get_pdbs_from_unicode(uniprot_id)
-            pdbs_dict = dict()
-            for pdb in pdb_ids:
-                try:
-                    if check_if_pdb_xray(pdb):
-                        pdb_fasta = get_pdb_fasta(pdb)
-                        pdbs_dict[uniprot_id + '-' + pdb] = pdb_fasta.strip('"')
-                except HTTPError:
-                    print(f'Failed fetching FASTA sequence for: {pdb}')
-            pdbs_dict2 = dict()
-            for key, value in pdbs_dict.items():
-                if value not in list(pdbs_dict2.values()):
-                    pdbs_dict2[key] = value
-            for key, value in pdbs_dict2.items():
-                handle.write(f'>{key}\n{value}\n')
-
+    if os.path.exists(os.path.join(dude_dir_path, 'fastas_from_dude.txt')):
+        log(f'Starting fetching FASTA\'s for DUDE')
+        dude_uni_ids = DUDE_uniID_from_folder(dude_dir_path)
+        with open('fastas_from_dude.txt', 'w') as handle:
+            for uniprot_id in dude_uni_ids:
+                pdb_ids = get_pdbs_from_unicode(uniprot_id)
+                pdbs_dict = dict()
+                for pdb in pdb_ids:
+                    try:
+                        if check_if_pdb_xray(pdb):
+                            pdb_fasta = get_pdb_fasta(pdb)
+                            pdbs_dict[uniprot_id + '-' + pdb] = pdb_fasta.strip('"')
+                    except HTTPError:
+                        log(f'Failed fetching FASTA sequence for: {pdb}')
+                pdbs_dict2 = dict()
+                for key, value in pdbs_dict.items():
+                    if value not in list(pdbs_dict2.values()):
+                        pdbs_dict2[key] = value
+                for key, value in pdbs_dict2.items():
+                    handle.write(f'>{key}\n{value}\n')
+    else:
+        log('DUD-E fastas already exists.')
 
 def DUDE_uniID_from_folder(dude_folder=DUDE_PATH):
     dude_uni_ids = set()

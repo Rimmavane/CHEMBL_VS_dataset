@@ -1,7 +1,18 @@
 from os.path import join
 from os import getcwd
 from utils import create_folder_if_not_existent
+import time
 
+# IF LOGGING SET TO TRUE, COMMUNICATES WILL BE REDIRECTED TO A FILE, ELSE THEY WILL BE SHOWN IN CONSOLE
+LOGGING = True
+if LOGGING:
+    t = time.localtime()
+    timestamp = time.strftime('%b-%d-%Y_%H%M', t)
+    LOG_FILE = join(PROJECT_HOME, f'log_{timestamp}.txt')
+else:
+    LOG_FILE = ''
+
+# MAIN PATH FROM WHERE THE PIPELINE WILL BE WORKING
 PROJECT_HOME = getcwd()
 MAIN_CSV_NAME = join(PROJECT_HOME, 'master_table.csv')
 
@@ -30,10 +41,13 @@ create_folder_if_not_existent(BLAST_MAIN_FOLDER)
 CHEMBL_SMILES_FOLDER = join(PROJECT_HOME, 'chembl_smiles')
 create_folder_if_not_existent(CHEMBL_SMILES_FOLDER)
 
-# FILTERING ARGUMENTS
-INITIAL_FILTER = True
+SIMILARITY_MATRICES_FOLDER = join(PROJECT_HOME, 'similarity_matrices')
+create_folder_if_not_existent(SIMILARITY_MATRICES_FOLDER)
 
-SAMPLING_FILTER = True
+# FILTERING ARGUMENTS
+INITIAL_FILTER = False
+
+SAMPLING_FILTER = False
 LIGAND_THRESHOLD = 100  # int
 LOWEST_TC_SIMILARITY_BETWEEN_LIGANDS_THRESHOLD = (0.95,)    # a tuple
 LOWER_LIMIT_OF_LIGANDS = (50,)  # a tuple
@@ -43,3 +57,6 @@ BLAST = True
 CHOSEN_TC_THRESHOLD = 0.95  # float
 CHOSEN_LIGAND_LIMIT = 50    # int
 E_VALUE_THRESHOLD = 0.00001   # float
+
+# CRATING SIMILARITY MATRICES
+CREATE_ACIVES_SIMILARITY_MATRICES = True

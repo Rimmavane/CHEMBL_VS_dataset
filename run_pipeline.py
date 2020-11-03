@@ -7,11 +7,13 @@ from paths_and_settings import *
 import prepare_targets_csv
 import sample_targets_by_activity
 import prepare_blast_on_targets
+from utils import log
+import prepare_similarity
 
 
 # uses prepare_targets_csvs
-if INITIAL_FILTER is True:
-    print('STARTING CREATING TARGETS CSV AND FIRST FILTERING STEPS')
+if INITIAL_FILTER:
+    log('STARTING CREATING TARGETS CSV AND FIRST FILTERING STEPS')
     # First, let's just parse the csv file to extract compounds ChEMBL IDs:
     targets = pd.read_csv(RAW_TARGETS)
     # This will be our resulting structure mapping compound ChEMBL IDs into target uniprot IDs
@@ -29,9 +31,9 @@ if INITIAL_FILTER is True:
     kd_ids = set(kd['Target'])
     kd = prepare_targets_csv.duplicates_parser(kd)
 
-    print(f'All targets: {len(set(all_targets))}')
+    log(f'All targets: {len(set(all_targets))}')
     filtered = list((ki_ids | ic50_ids | kd_ids) & set(all_targets))
-    print(f'Targets with kd, ic50 or ki : {len(set(filtered))}')
+    log(f'Targets with kd, ic50 or ki : {len(set(filtered))}')
 
     for index, row in targets.iterrows():
         k = row['ChEMBL ID']
@@ -94,19 +96,19 @@ if INITIAL_FILTER is True:
 
     targets.to_csv(MAIN_CSV_NAME)
 
-    print(f'Targets at the end of first filtering: {len(targets)}')
-    print('Finished first filtering step.')
+    log(f'Targets at the end of first filtering: {len(targets)}')
+    log('Finished first filtering step.')
 
-if SAMPLING_FILTER is True:
-    print(f'Starting sampling targets with attributes: activity threshold {LOWER_LIMIT_OF_LIGANDS}, Tanimoto similarity'
+if SAMPLING_FILTER:
+    log(f'Starting sampling targets with attributes: activity threshold {LOWER_LIMIT_OF_LIGANDS}, Tanimoto similarity'
           f' thresholds: {LOWEST_TC_SIMILARITY_BETWEEN_LIGANDS_THRESHOLD}, PDB ligand frequency threshold: {LIGAND_THRESHOLD}')
     sample_targets_by_activity.sample_by_activity(activity_threshold=LOWER_LIMIT_OF_LIGANDS,
                                                   thresholds=LOWEST_TC_SIMILARITY_BETWEEN_LIGANDS_THRESHOLD,
                                                   ligand_threshold=LIGAND_THRESHOLD)
 
 # uses sample_targets_by_activity
-if BLAST is True:
-    print("Starting filtering targets by BLAST towards DUD-E and DEKOIS")
+if BLAST:
+    log("Starting filtering targets by BLAST towards DUD-E and DEKOIS")
     # GET FASTAS THAT WILL BE USED DURING THE BLAST IN TERMINAL
     prepare_blast_on_targets.fetch_fastas_for_DEKOIS(DEKOIS_PATH)
     prepare_blast_on_targets.fetch_fastas_for_DUDE(DUDE_PATH)
@@ -125,10 +127,10 @@ if BLAST is True:
     subprocess.call(
         f"blastp -db fastas_from_dekois.txt -query {source_fastas} -out targets-dekois_blast.txt -outfmt 10 -evalue {E_VALUE_THRESHOLD}",
         shell=True)
-    print('Finished BLASTING!')
+    log('Finished BLASTING!')
     prepare_blast_on_targets.load_fasta_sequences(source_fastas, 'fastas_from_dude.txt', 'chembl-dude_blast.txt')
     prepare_blast_on_targets.load_fasta_sequences(source_fastas, 'fastas_from_dekois.txt', 'chembl-dekois_blast.txt')
-    print('Finished reading BLAST outputs!')
+    log('Finished reading BLAST outputs!')
     os.chdir(PROJECT_HOME)
 
     prepare_blast_on_targets.make_blast_csv(source_csv, [os.path.join(BLAST_MAIN_FOLDER, 'targets-dekois_blast.txt'),
@@ -141,4 +143,7 @@ if BLAST is True:
     blast_ids = list(blast_results.index.tolist())
     source_csv = pd.read_csv(source_csv)
     source_csv = source_csv[source_csv["ChEMBL ID"].isin(blast_ids)]
-    source_csv.to_csv(PROJECT_HOME, f'master_table_final_{CHOSEN_LIGAND_LIMIT}_tc_{CHOSEN_TC_THRESHOLD}.csv')
+    source_csv.to_csv(os.path.join(PROJECT_HOME, f'master_table_final_{CHOSEN_LIGAND_LIMIT}_tc_{CHOSEN_TC_THRESHOLD}.csv'))
+
+if CREATE_ACIVES_SIMILARITY_MATRICES:
+    prepare_similarity.prepare_actives_similarirty_matrices(os.path.join(PROJECT_HOME, f'master_table_final_{CHOSEN_LIGAND_LIMIT}_tc_{CHOSEN_TC_THRESHOLD}.csv'))

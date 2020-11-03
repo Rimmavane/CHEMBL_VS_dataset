@@ -5,22 +5,22 @@ from collections import Counter
 from rdkit import DataStructs
 import os
 import numpy as np
-from found_decoys_bias import make_fingerprint
+from utils import make_fingerprint, log
 from pdb_query import get_pdb_fasta
 from paths_and_settings import *
 
 
-def get_ligands(pdbs, suffix="", printing=False):
+def get_ligands(pdbs, suffix=""):
     results = dict()
     pdb_to_ligands = dict()
     s = 1
     for target in pdbs:
         if s % 100 == 0:
-            print('Currently checked ' + str(s) + ' targets.')
+            log(f'Currently checked {s} targets.')
         ligands = []
         smiles = dict()
         ex = pdbs[target].split()
-        print(f'{len(ex)} PDB\'s found for target {target}, {s}/{len(pdbs)}')
+        log(f'{len(ex)} PDB\'s found for target {target}, {s}/{len(pdbs)}')
         k = 0
         failes = 0
         for pdb_id in ex:
@@ -40,12 +40,10 @@ def get_ligands(pdbs, suffix="", printing=False):
                 except:
                     failes += 1
                     if failes > 200:
-                        print(f'Can\'t download ligand {pdb_id}, retried {failes} times.')
+                        log(f'Can\'t download ligand {pdb_id}, retried {failes} times.')
                     continue
                 break
             k += 1
-            if printing:
-                print(k / len(ex), s / len(pdbs))
         results[target] = [ligands, smiles]
         s += 1
     pickle.dump(results, open(os.path.join(COMPOUND_SAMPLING_FOLDER, f"ligands{suffix}.pkl"), "wb"))
@@ -276,6 +274,7 @@ def make_chembls_smiles_files(path_to_fitered_targets, smiles_folder=STANDARDS_F
                     pass
     return smile_dict
 
+
 def sample_by_active_compounds(list_of_values):
     if not os.path.exists(COMPOUND_SAMPLING_FOLDER):
         os.makedirs(COMPOUND_SAMPLING_FOLDER)
@@ -300,12 +299,12 @@ def sample_by_activity(activity_threshold, thresholds=(0.95,), ligand_threshold=
             data = pd.read_csv(os.path.join(COMPOUND_SAMPLING_FOLDER, file), index_col=0)
             pdbs = dict(data['PDB_entry'])
             try:
-                with open(os.path.join(COMPOUND_SAMPLING_FOLDER, f'ligands{index}.pkl', 'rb')) as handle:
+                with open(os.path.join(COMPOUND_SAMPLING_FOLDER, f'ligands{index}.pkl'), 'rb') as handle:
                     results = pickle.load(handle)
-                with open(os.path.join(COMPOUND_SAMPLING_FOLDER, f'pdb_to_ligands{index}.pkl', 'rb')) as handle:
+                with open(os.path.join(COMPOUND_SAMPLING_FOLDER, f'pdb_to_ligands{index}.pkl'), 'rb') as handle:
                     pdb_to_ligands = pickle.load(handle)
             except FileNotFoundError:
-                results, pdb_to_ligands = get_ligands(pdbs, suffix=str(index), printing=False)  # download ligands
+                results, pdb_to_ligands = get_ligands(pdbs, suffix=str(index))  # download ligands
                 print(f'For index {index} - Number of targets with ligands: {len(results)}')
             try:
                 with open(os.path.join(COMPOUND_SAMPLING_FOLDER, 'fingerprints_chembl.pkl'), 'rb') as handle:
