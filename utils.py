@@ -2,7 +2,6 @@ from rdkit.Chem import AllChem, MACCSkeys
 from rdkit import Chem
 import os
 from itertools import groupby
-from paths_and_settings import LOG_FILE
 
 
 def make_fingerprint(smile: str, fp='fp2'):
@@ -40,6 +39,7 @@ def load_smiles(filepath):
 
 
 def log(string=''):
+    from paths_and_settings import LOG_FILE
     if len(LOG_FILE) > 0:
         os.popen(f"echo '{string}' >> {LOG_FILE} &")
     else:

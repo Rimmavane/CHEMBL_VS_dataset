@@ -141,7 +141,7 @@ if BLAST:
     blast_results['identity%_dude'].fillna(0, inplace=True)
     blast_results = blast_results[(blast_results['identity%_dekois'] <= 30) & (blast_results['identity%_dude'] <= 30)]
     blast_ids = list(blast_results.index.tolist())
-    source_csv = pd.read_csv(source_csv)
+    source_csv = pd.read_csv(source_csv, index_col=0)
     source_csv = source_csv[source_csv["ChEMBL ID"].isin(blast_ids)]
     source_csv.to_csv(os.path.join(PROJECT_HOME, f'master_table_final_{CHOSEN_LIGAND_LIMIT}_tc_{CHOSEN_TC_THRESHOLD}.csv'))
 
