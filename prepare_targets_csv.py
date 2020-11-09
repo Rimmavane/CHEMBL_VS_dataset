@@ -73,7 +73,7 @@ def check_activity_value_relation(main_csv, loaded_csv, standard_type, std_id='T
             std_value = (float(std_value) * 1000) / mol_weight
 
         std_value = float(std_value)
-        if std_value < 10 and rel == '=':
+        if std_value < ACTIVITY_VALUE_THRESHOLD and rel == '=':
             main_csv.at[target_id, '{}_active'.format(standard_type)] += 1
             continue
         elif std_value >= 10 and rel == '=':
@@ -104,7 +104,7 @@ def make_standard_csv(loaded_csv, standard_type, compounds='Molecule', std_id='T
                 std_value = std_value.replace(',', '.')
             if std_value is np.nan:
                 to_save.append('Inactive')
-                to_save.append('Not determined')
+                to_save.append('')
                 to_save.append('')
                 to_save.append(str(standard_type))
                 for ix, i in enumerate(to_save):
@@ -122,10 +122,10 @@ def make_standard_csv(loaded_csv, standard_type, compounds='Molecule', std_id='T
                 std_value = float(std_value) * 1000 / mol_weight
 
             std_value = float(std_value)
-            if std_value < 10 and rel == '=':
+            if std_value < ACTIVITY_VALUE_THRESHOLD and rel == '=':
                 to_save.append('Active')
-            elif std_value < 10 and rel != '=':
-                pass
+            elif std_value < ACTIVITY_VALUE_THRESHOLD and rel != '=':
+                continue
             else:
                 to_save.append('Inctive')
 
@@ -199,7 +199,7 @@ def decois_uniID_from_folder(dir_name, extension, substring1='Name', substring2=
                         except:
                             if '>' in line:
                                 new_std.value = (float(line.strip('\n').strip('>')) / 1000) + 1
-                                if new_std.value < 10:
+                                if new_std.value < ACTIVITY_VALUE_THRESHOLD:
                                     new_std.activity = 1
                                 else:
                                     new_std.activity = 0
@@ -239,7 +239,7 @@ def decois_active_and_threshold(main_csv, decois_ligands, decois_ligands_standar
                     main_csv.at[index, 'DEKOIS_actives'] = main_csv.at[index, 'DEKOIS_actives'] + 1
                     select_standards = decois_ligands_standard[key]
                     for std in select_standards:
-                        if std.value < 10:
+                        if std.value < ACTIVITY_VALUE_THRESHOLD:
                             main_csv.at[index, 'DEKOIS_actives_threshold'] = main_csv.at[
                                                                                  index, 'DEKOIS_actives_threshold'] + 1
                             break
@@ -289,7 +289,7 @@ def check_if_dude_in_master(main_csv, dude_path=DUDE_PATH,
                                 for std in standards:
                                     if std in line:
                                         value = float(line.split(std)[1].split(' ')[1]) / 1000
-                                        if value < 10:
+                                        if value < ACTIVITY_VALUE_THRESHOLD:
                                             main_csv.at[index, k2[1]] = main_csv.at[index, k2[1]] + 1
                                         break
                         if file == 1:

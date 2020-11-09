@@ -1,59 +1,122 @@
-import urllib.request
-import pypdb
 from utils import log
+from urllib.error import HTTPError
+import requests
 
 
 def get_pdbs_from_unicode(uni_id):
-    url = 'http://www.rcsb.org/pdb/rest/search'
-    queryText = (f"    \n"
-                 f"    <orgPdbQuery>\n"
-                 f"    \n"
-                 f"    <queryType>org.pdb.query.simple.UpAccessionIdQuery</queryType>\n"
-                 f"    \n"
-                 f"    <description>Simple query for a list of Uniprot Accession IDs: {uni_id}</description>\n"
-                 f"    \n"
-                 f"    <accessionIdList>{uni_id}</accessionIdList>\n"
-                 f"    \n"
-                 f"    </orgPdbQuery>\n"
-                 f"    ").encode('utf-8')
-    req = urllib.request.Request(url)
-
-    with urllib.request.urlopen(req, data=queryText) as f:
-        resp = f.read().decode('utf-8').split()
-        resp = [i[:4] for i in resp]
-        if 'null' in resp or '' in resp:
-            return []
-        return resp
+    url = 'https://search.rcsb.org/rcsbsearch/v1/query?'
+    queryText = {
+        "query": {
+            "type": "group",
+            "logical_operator": "and",
+            "nodes": [
+                {
+                    "type": "terminal",
+                    "service": "text",
+                    "parameters": {
+                        "operator": "exact_match",
+                        "value": f"{uni_id}",
+                        "attribute": "rcsb_polymer_entity_container_identifiers.reference_sequence_identifiers.database_accession"
+                    }
+                },
+                {
+                    "type": "terminal",
+                    "service": "text",
+                    "parameters": {
+                        "operator": "exact_match",
+                        "value": "UniProt",
+                        "attribute": "rcsb_polymer_entity_container_identifiers.reference_sequence_identifiers.database_name"
+                    }
+                }
+            ]
+        },
+        "return_type": "polymer_entity"
+    }
+    resp = requests.post(url, json=queryText)
+    if resp.ok:
+        result_set = resp.json()['result_set']
+        results = [i['identifier'].split('_')[0] for i in result_set]
+        resp.close()
+        return results
+    else:
+        log(f"Failed to download PDBs for UNIPROT ID {uni_id}")
+        return []
 
 
 def get_pdb_fasta(pdb_id):
     while True:
         counter = 0
-        if counter == 200:
-            raise Exception(f'Stopped trying to download smiles for {pdb_id} after {counter} tries.')
+        if counter == 20:
+            log(f'Stopped trying to download smiles for {pdb_id} after {counter} tries.')
+            return ''
         try:
-            with urllib.request.urlopen(f'http://www.rcsb.org/pdb/rest/customReport.csv?pdbids={pdb_id}&customReportColumns=sequence&format=csv&service=wsfile') as f:
-                resp = f.read()
-                fastas = resp.decode("utf-8").replace('\n', ',').split(',')[5::3]
-                best = ''
-                for fasta in fastas:
-                    if len(fasta) > len(best):
-                        best = fasta
-                return best.strip('"')
-        except:
             counter += 1
+            url = f'https://data.rcsb.org/rest/v1/core/polymer_entity/{pdb_id}/1'
+            resp = requests.get(url)
+            fasta = resp.json()['entity_poly']['pdbx_seq_one_letter_code']
+            resp.close()
+            return fasta
+        except HTTPError:
             continue
 
 
 def check_if_pdb_xray(pdb_code):
-    for i in range(10):
-        try:
-            if pypdb.get_entity_info(pdb_code)['Method']['@name'] == 'xray':
-                return True
-        except TypeError:
-            log(f'{pdb_code} could not be checked for x-ray feature, attempt {i}')
+    queryText = {
+        "query": "query($id: String!){entry(entry_id:$id){exptl{method}}}",
+        "variables": {"id": f"{pdb_code}"}
+    }
+    url = "https://data.rcsb.org/graphql"
+    resp = requests.post(url, json=queryText)
+    data = resp.json()['data']['entry']
+    try:
+        data = data['exptl'][0]['method']
+        resp.close()
+        if 'x-ray' in data.lower() or 'xray' in data.lower():
+            return True
+    except TypeError:
+        return False
     return False
 
 
 def get_pdb_structure(pdb_id):
-    return pypdb.get_pdb_file(pdb_id)
+    full_url = f"https://files.rcsb.org/download/{pdb_id}.pdb"
+    resp = requests.get(full_url)
+    data = resp.text
+    resp.close()
+    return data
+
+
+def get_ligands_for_PDB(pdb_code):
+    results = dict()
+    try:
+        url = "https://data.rcsb.org/graphql"
+        queryText = dict(query="""query ($id: String!) {
+                                      entry(entry_id:$id) {
+                                        nonpolymer_entities {
+                                          nonpolymer_comp {
+                                            chem_comp {
+                                              id
+                                            }
+                                            pdbx_chem_comp_descriptor{
+                                              descriptor
+                                              type
+                                              program
+                                            }
+                                          }
+                                        }
+                                      }
+                                    }"""
+                         , variables={"id": f"6GYR"})
+        resp = requests.post(url, json=queryText)
+        assert resp.json()['data']['entry']['nonpolymer_entities']
+        ligands = resp.json()['data']['entry']['nonpolymer_entities']
+        for i in ligands:
+            lig_id = i['nonpolymer_comp']['chem_comp']['id']
+            lig_smi = [p['descriptor'] for p in i['nonpolymer_comp']['pdbx_chem_comp_descriptor'] if
+                       (p['type'] == 'SMILES_CANONICAL' and p['program'] == 'OpenEye OEToolkits')][0]
+            results[lig_id] = lig_smi
+        resp.close()
+        return results
+    except AssertionError:
+        log(f'No ligands or query problem for ligands for {pdb_code}')
+        return results

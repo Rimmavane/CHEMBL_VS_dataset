@@ -1,13 +1,18 @@
 import pandas as pd
-import pypdb
 import pickle
 from collections import Counter
-from rdkit import DataStructs
+from rdkit import DataStructs, Chem
+from rdkit.Chem import rdMolDescriptors
 import os
 import numpy as np
 from utils import make_fingerprint, log
-from pdb_query import get_pdb_fasta
+from pdb_query import get_pdb_fasta, get_ligands_for_PDB
 from paths_and_settings import *
+
+
+def mol_weight_from_smiles(smile):
+    x = Chem.MolFromSmiles(smile)
+    return rdMolDescriptors.CalcExactMolWt(x)  # return grams per mol
 
 
 def get_ligands(pdbs, suffix=""):
@@ -27,19 +32,15 @@ def get_ligands(pdbs, suffix=""):
             while True:
                 try:
                     pdb_to_ligands[pdb_id] = []
-                    i_ligands = pypdb.get_ligands(pdb_id)
-                    if i_ligands['ligandInfo'] is not None:
-                        ligs = i_ligands['ligandInfo'][
-                            'ligand']  # l['ligandInfo']['ligand'] --> '@structureId', '@chemicalID', 'smiles'
-                        for lig in ligs:
-                            if type(lig) == dict:
-                                ligands.append(str(lig['@chemicalID']))
-                                pdb_to_ligands[pdb_id].append(str(lig['@chemicalID']))
-                                smiles[lig['@chemicalID']] = lig['smiles']
+                    ligs = get_ligands_for_PDB(pdb_id)
+                    for lig in ligs:
+                        ligands.append(lig)
+                        pdb_to_ligands[pdb_id].append(lig)
+                        smiles[lig] = ligs[lig]
                     failes = 0
                 except:
                     failes += 1
-                    if failes > 200:
+                    if failes > 20:
                         log(f'Can\'t download ligand {pdb_id}, retried {failes} times.')
                     continue
                 break
@@ -85,7 +86,7 @@ def make_fingerprints_base(targets, index='', path=STANDARDS_FOLDER, prefix='com
                 chem_smiles = make_fingerprint(sm, fp='fp2')
                 k_inner.append((chem_smiles, sm, s2[sm]))
             except:
-                print('Failed to create Chem SMILES from: ', sm)
+                log(f'Failed to create Chem SMILES from: {sm}')
                 fails.append((target, sm))
         smile_dict[target] = k_inner
 
@@ -93,7 +94,7 @@ def make_fingerprints_base(targets, index='', path=STANDARDS_FOLDER, prefix='com
     name_failes = os.path.join(COMPOUND_SAMPLING_FOLDER, f"fingerprints_chembl_fails{index}.pkl")
     pickle.dump(smile_dict, open(name_fp, "wb"))
     pickle.dump(fails, open(name_failes, "wb"))
-    print(f'Saved fingerptints to {name_fp}')
+    log(f'Saved fingerptints to {name_fp}')
     return smile_dict, fails
 
 
@@ -126,18 +127,23 @@ def pdb_ligands_vs_chembl_ligands(pdbs, fingerprints, threshold=0.95, suffix="")
     fails = [(i[0], i[1][0], i[1][1]) for i in fails]
 
     pickle.dump(output, open(os.path.join(COMPOUND_SAMPLING_FOLDER, f"pdb_vs_chembl_filtered_ligands_tc{threshold}-{suffix}.pkl"), "wb"))
-    pickle.dump(fails, open(os.path.join(COMPOUND_SAMPLING_FOLDER, f"/fail_smiles_pdb_tc{threshold}-{suffix}.pkl"), "wb"))
+    pickle.dump(fails, open(os.path.join(COMPOUND_SAMPLING_FOLDER, f"fail_smiles_pdb_tc{threshold}-{suffix}.pkl"), "wb"))
     return output, fails
 
 
-def filter_ligands(all_ligands, threshold=100):  # this function here is probably the biggest weak point of whole pipeline
-    to_remove = set(list({k: v for k, v in count_ligands(all_ligands).items() if v > threshold}.keys()))
+def filter_ligands(all_ligands, threshold=100):
     for target in list(all_ligands.keys()):
         keys = set(all_ligands[target][0])
-        intersection = keys.intersection(to_remove)
-        for lig_name in intersection:
-            all_ligands[target][0].remove(lig_name)
-            all_ligands[target][1].pop(lig_name, None)
+        for lig_name in keys:
+            lig_smi = all_ligands[target][1][lig_name]
+            try:
+                lig_smi_weight = mol_weight_from_smiles(lig_smi)
+            except:
+                lig_smi_weight = -1
+                log(f'Failed to count molecular weight for ligand {lig_name} with smile {lig_smi}')
+            if lig_smi_weight < threshold:
+                all_ligands[target][0].remove(lig_name)
+                all_ligands[target][1].pop(lig_name, None)
         if len(all_ligands[target][0]) == 0:
             all_ligands.pop(target, None)
     return all_ligands
@@ -168,7 +174,7 @@ def zip_results_with_pdb(results_final, pdb_to_ligands, master_table):
         try:
             possible_pdbs = list(master_table[master_table['ChEMBL ID'] == target]['PDB_entry'])[0].split()
         except:
-            print('No PDB entrys for: ', target)
+            log(f'No PDB entrys for: {target}')
             continue
         target_ligands = list(results_final[target].keys())  # ligand
         for ligand in target_ligands:
@@ -202,6 +208,7 @@ def choose_primary_pdb_for_chembl(main_table):
     main_table['main_PDB_structure'] = ''
     for index, row in main_table.iterrows():
         pdbs = row['PDB_entry'].split()
+        log(f'Fetching PDBs for {index}, {len(pdbs)} PDBs to fetch.')
         fasta = [get_pdb_fasta(i) for i in pdbs]
         best = ''
         for seq in fasta:
@@ -287,7 +294,7 @@ def sample_by_active_compounds(list_of_values):
        'DEKOIS_actives_threshold', 'DEKOIS_decoys', 'DUDE_ID',
        'Active_in_DUDE', 'Active_in_DUDE_threshold', 'Inactive_in_DUDE',
        'Inactive_in_DUDE_threshold'], axis=1)
-        print(f'Targets without coverage for threshold {val}:', len(new))
+        log(f'Targets without coverage for threshold {val}: {len(new)}')
         new.to_csv(os.path.join(COMPOUND_SAMPLING_FOLDER, f'targets_after_filtering_{val}.csv'))
 
 
@@ -305,19 +312,19 @@ def sample_by_activity(activity_threshold, thresholds=(0.95,), ligand_threshold=
                     pdb_to_ligands = pickle.load(handle)
             except FileNotFoundError:
                 results, pdb_to_ligands = get_ligands(pdbs, suffix=str(index))  # download ligands
-                print(f'For index {index} - Number of targets with ligands: {len(results)}')
+                log(f'For index {index} - Number of targets with ligands: {len(results)}')
             try:
                 with open(os.path.join(COMPOUND_SAMPLING_FOLDER, 'fingerprints_chembl.pkl'), 'rb') as handle:
                     smiles = pickle.load(handle)
-                    print('Fingerprints found and loaded!')
+                    log('Fingerprints found and loaded!')
             except FileNotFoundError:
-                print('Preparing fingerprint base...')
+                log('Preparing fingerprint base...')
                 smiles, fails1 = make_fingerprints_base(targets=pd.read_csv(MAIN_CSV_NAME, index_col=0))
-            print(f'Before filtering ligands: {len(results)}')
+            log(f'Before filtering ligands: {len(results)}')
             results = filter_ligands(results, ligand_threshold)
-            print(f'After filtering ligands with threshold of {ligand_threshold}: {len(results)}')
-            print('Results len:', len(results), list(results.values())[0])
-            print('Smiles len:', len(smiles))
+            log(f'After filtering ligands with threshold of {ligand_threshold}: {len(results)}')
+            log(f'Results len: {len(results)}')
+            log(f'Smiles len: {len(smiles)}')
             results_final, fails2 = pdb_ligands_vs_chembl_ligands(results, smiles, threshold=0.95, suffix=str(index))
 
             fails2 = pd.DataFrame(fails2, columns=['Target', 'Ligand_ID', 'Ligand_Smiles'])
@@ -328,11 +335,11 @@ def sample_by_activity(activity_threshold, thresholds=(0.95,), ligand_threshold=
             zipped_results = zip_results_with_pdb(results_final, pdb_to_ligands, master_table)
 
             master_table = update_master_table(master_table, zipped_results)
-            print('Starting primary PDB search')
+            log('Starting primary PDB search')
             master_table = choose_primary_pdb_for_chembl(master_table)
             master_table.to_csv(os.path.join(COMPOUND_SAMPLING_FOLDER, f"targets_after_fingerprint_similarity{index}_tc{threshold}.csv"))
             evaluate(index, (threshold,))
-            print(f'For index {index} - Targets having at least one ligand with TC > {threshold} '
+            log(f'For index {index} - Targets having at least one ligand with TC > {threshold} '
                   f'to FP base of given target: {len(results_final)}')
     make_chembls_smiles_files(os.path.join(COMPOUND_SAMPLING_FOLDER,
                                            f'pdb_vs_chembl_filtered_ligands_tc{CHOSEN_TC_THRESHOLD}-{CHOSEN_LIGAND_LIMIT}.pkl'))

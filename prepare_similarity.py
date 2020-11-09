@@ -51,6 +51,6 @@ def prepare_actives_similarirty_matrices(main_csv_path):
     for target in ids:
         actives_path = os.path.join(CHEMBL_SMILES_FOLDER, f'{target}_active.smi')
         log(f'Starting counting AvA similarity matrix for {target}')
-        Prepare_Similarity(output_name=f'{target}_AvA_similarity.csv',
+        Prepare_Similarity(output_name=f'{target}_AvA_similarity',
                            path_query=actives_path,
                            path_subject=actives_path)

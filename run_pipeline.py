@@ -9,7 +9,7 @@ import sample_targets_by_activity
 import prepare_blast_on_targets
 from utils import log
 import prepare_similarity
-
+import reduce_actives_analogue_bias as raab
 
 # uses prepare_targets_csvs
 if INITIAL_FILTER:
@@ -101,10 +101,10 @@ if INITIAL_FILTER:
 
 if SAMPLING_FILTER:
     log(f'Starting sampling targets with attributes: activity threshold {LOWER_LIMIT_OF_LIGANDS}, Tanimoto similarity'
-          f' thresholds: {LOWEST_TC_SIMILARITY_BETWEEN_LIGANDS_THRESHOLD}, PDB ligand frequency threshold: {LIGAND_THRESHOLD}')
+        f' thresholds: {LOWEST_TC_SIMILARITY_BETWEEN_LIGANDS_THRESHOLD}, PDB ligand frequency threshold: {LIGAND_WEIGHT_LOWER_THRESHOLD}')
     sample_targets_by_activity.sample_by_activity(activity_threshold=LOWER_LIMIT_OF_LIGANDS,
                                                   thresholds=LOWEST_TC_SIMILARITY_BETWEEN_LIGANDS_THRESHOLD,
-                                                  ligand_threshold=LIGAND_THRESHOLD)
+                                                  ligand_threshold=LIGAND_WEIGHT_LOWER_THRESHOLD)
 
 # uses sample_targets_by_activity
 if BLAST:
@@ -136,14 +136,32 @@ if BLAST:
     prepare_blast_on_targets.make_blast_csv(source_csv, [os.path.join(BLAST_MAIN_FOLDER, 'targets-dekois_blast.txt'),
                                                          os.path.join(BLAST_MAIN_FOLDER, 'targets-dude_blast.txt')])
 
-    blast_results = pd.read_csv(os.path.join(BLAST_MAIN_FOLDER, 'chembl_blast_results.csv'), index_col=0, dtype={1: str})
+    blast_results = pd.read_csv(os.path.join(BLAST_MAIN_FOLDER, 'chembl_blast_results.csv'), index_col=0,
+                                dtype={1: str})
     blast_results['identity%_dekois'].fillna(0, inplace=True)
     blast_results['identity%_dude'].fillna(0, inplace=True)
-    blast_results = blast_results[(blast_results['identity%_dekois'] <= 30) & (blast_results['identity%_dude'] <= 30)]
+    blast_results = blast_results[(blast_results['identity%_dekois'] <= MAX_BLAST_SIMILARITY) & (
+                blast_results['identity%_dude'] <= MAX_BLAST_SIMILARITY)]
     blast_ids = list(blast_results.index.tolist())
     source_csv = pd.read_csv(source_csv, index_col=0)
     source_csv = source_csv[source_csv["ChEMBL ID"].isin(blast_ids)]
-    source_csv.to_csv(os.path.join(PROJECT_HOME, f'master_table_final_{CHOSEN_LIGAND_LIMIT}_tc_{CHOSEN_TC_THRESHOLD}.csv'))
+    source_csv.to_csv(
+        os.path.join(PROJECT_HOME, f'master_table_final_{CHOSEN_LIGAND_LIMIT}_tc_{CHOSEN_TC_THRESHOLD}.csv'))
 
-if CREATE_ACIVES_SIMILARITY_MATRICES:
-    prepare_similarity.prepare_actives_similarirty_matrices(os.path.join(PROJECT_HOME, f'master_table_final_{CHOSEN_LIGAND_LIMIT}_tc_{CHOSEN_TC_THRESHOLD}.csv'))
+FINAL_TABLE_PATH = os.path.join(PROJECT_HOME, f'master_table_final_{CHOSEN_LIGAND_LIMIT}_tc_{CHOSEN_TC_THRESHOLD}.csv')
+
+if CREATE_ACTIVES_SIMILARITY_MATRICES:
+    prepare_similarity.prepare_actives_similarirty_matrices(FINAL_TABLE_PATH)
+
+if FILTER_ACTIVES:
+    source_csv = pd.read_csv(FINAL_TABLE_PATH, index_col=0)
+    ids = source_csv['ChEMBL ID'].tolist()
+    acts = raab.load_activities()
+    for target in ids:
+        target_best_actives = raab.choose_best_actives(target_id=target,
+                                                       path_to_analog_matrix=join(SIMILARITY_MATRICES_FOLDER,
+                                                                                  f'{target}_AvA_similarity.csv'),
+                                                       acts_dataframe=acts,
+                                                       tc_threshold=ACTIVES_TC_SIMILARITY_THRESHOLD)
+        raab.filter_actives_smiles_file(target_id=target, best_actives=target_best_actives)
+        target_filtered_actives_path = os.path.join(CHEMBL_SMILES_FOLDER, f'{target}_filtered_active.smi')

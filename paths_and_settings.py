@@ -3,9 +3,9 @@ from os import getcwd
 from utils import create_folder_if_not_existent
 import time
 
-# IF LOGGING SET TO TRUE, COMMUNICATES WILL BE REDIRECTED TO A FILE, ELSE THEY WILL BE SHOWN IN CONSOLE
+# IF LOGGING SET TO TRUE, COMMUNICATES WILL BE REDIRECTED TO A FILE, OTHERWISE THEY WILL BE PRINTED IN CONSOLE
 
-# MAIN PATH FROM WHERE THE PIPELINE WILL BE WORKING
+# MAIN PATH FROM WHICH THE PIPELINE WILL BE WORKING
 PROJECT_HOME = getcwd()
 MAIN_CSV_NAME = join(PROJECT_HOME, 'master_table.csv')
 
@@ -13,7 +13,7 @@ LOGGING = True
 LOG_FILE = ''
 if LOGGING:
     t = time.localtime()
-    timestamp = time.strftime('%b-%d-%Y_%H%M', t)
+    timestamp = time.strftime('%b-%d-%Y', t)
     LOG_FILE = join(PROJECT_HOME, f'log_{timestamp}.txt')
 
 # REQUIRED INPUT DATA
@@ -45,18 +45,24 @@ SIMILARITY_MATRICES_FOLDER = join(PROJECT_HOME, 'similarity_matrices')
 create_folder_if_not_existent(SIMILARITY_MATRICES_FOLDER)
 
 # FILTERING ARGUMENTS
-INITIAL_FILTER = False
+INITIAL_FILTER = True
+ACTIVITY_VALUE_THRESHOLD = 10  # in nM
 
-SAMPLING_FILTER = False
-LIGAND_THRESHOLD = 100  # int
+SAMPLING_FILTER = True
+LIGAND_WEIGHT_LOWER_THRESHOLD = 200  # int
 LOWEST_TC_SIMILARITY_BETWEEN_LIGANDS_THRESHOLD = (0.95,)    # a tuple
 LOWER_LIMIT_OF_LIGANDS = (50,)  # a tuple
 
 # BLAST ARGUMENTS
-BLAST = False
+BLAST = True
 CHOSEN_TC_THRESHOLD = 0.95  # float
 CHOSEN_LIGAND_LIMIT = 50    # int
 E_VALUE_THRESHOLD = 0.00001   # float
+MAX_BLAST_SIMILARITY = 30  # sequences % similarity threshold between targets and best hits from DEKOIS/DUD-E
 
 # CRATING SIMILARITY MATRICES
-CREATE_ACIVES_SIMILARITY_MATRICES = True
+CREATE_ACTIVES_SIMILARITY_MATRICES = True
+
+# REDUCING ANALOGUE BIAS AMONG ACTIVES
+FILTER_ACTIVES = True
+ACTIVES_TC_SIMILARITY_THRESHOLD = 0.9  # maximum Tanimoto similarity between compounds in active set
