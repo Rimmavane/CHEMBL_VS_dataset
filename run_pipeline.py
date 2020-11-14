@@ -85,12 +85,16 @@ if INITIAL_FILTER:
     targets = prepare_targets_csv.check_activity_value_relation(targets, ic50, 'IC50')
 
     targets = prepare_targets_csv.sum_act_inact(targets)
+    try:
+        targets.drop('Species Group Flag', axis=1)
+    except:
+        pass
 
-    targets.drop('Species Group Flag', axis=1)
+    decois_ligands, decois_name_dict, decois_ligands_standards = prepare_targets_csv.decois_uniID_from_folder(
+        DEKOIS_PATH, '.sdf')
 
-    decois_ligands, decois_name_dict, decois_ligands_standards = prepare_targets_csv.decois_uniID_from_folder(DEKOIS_PATH, '.sdf')
-
-    targets = prepare_targets_csv.decois_decoys_number_to_master(targets, decois_name_dict, decois_ligands, decois_ligands_standards)
+    targets = prepare_targets_csv.decois_decoys_number_to_master(targets, decois_name_dict, decois_ligands,
+                                                                 decois_ligands_standards)
 
     targets = prepare_targets_csv.check_if_dude_in_master(targets)
 
@@ -110,8 +114,8 @@ if SAMPLING_FILTER:
 if BLAST:
     log("Starting filtering targets by BLAST towards DUD-E and DEKOIS")
     # GET FASTAS THAT WILL BE USED DURING THE BLAST IN TERMINAL
-    prepare_blast_on_targets.fetch_fastas_for_DEKOIS(DEKOIS_PATH)
-    prepare_blast_on_targets.fetch_fastas_for_DUDE(DUDE_PATH)
+    prepare_blast_on_targets.fetch_fastas_for_DEKOIS()
+    prepare_blast_on_targets.fetch_fastas_for_DUDE()
 
     # run blasts
     source_csv = os.path.join(COMPOUND_SAMPLING_FOLDER,
@@ -121,6 +125,8 @@ if BLAST:
     prepare_blast_on_targets.fetch_fastas_for_chembl(source_csv, source_fastas)
     os.chdir(BLAST_MAIN_FOLDER)
     subprocess.call(f"makeblastdb -in {source_fastas} -dbtype prot", shell=True)
+    subprocess.call(f"makeblastdb -in fastas_from_dude.txt -dbtype prot", shell=True)
+    subprocess.call(f"makeblastdb -in fastas_from_dekois.txt -dbtype prot", shell=True)
     subprocess.call(
         f"blastp -db fastas_from_dude.txt -query {source_fastas} -out targets-dude_blast.txt -outfmt 10 -evalue {E_VALUE_THRESHOLD}",
         shell=True)
@@ -128,8 +134,12 @@ if BLAST:
         f"blastp -db fastas_from_dekois.txt -query {source_fastas} -out targets-dekois_blast.txt -outfmt 10 -evalue {E_VALUE_THRESHOLD}",
         shell=True)
     log('Finished BLASTING!')
-    prepare_blast_on_targets.load_fasta_sequences(source_fastas, 'fastas_from_dude.txt', 'chembl-dude_blast.txt')
-    prepare_blast_on_targets.load_fasta_sequences(source_fastas, 'fastas_from_dekois.txt', 'chembl-dekois_blast.txt')
+    prepare_blast_on_targets.load_fasta_sequences(source_fastas,
+                                                  os.path.join(BLAST_MAIN_FOLDER, 'fastas_from_dude.txt'),
+                                                  os.path.join(BLAST_MAIN_FOLDER, 'targets-dude_blast.txt'))
+    prepare_blast_on_targets.load_fasta_sequences(source_fastas,
+                                                  os.path.join(BLAST_MAIN_FOLDER, 'fastas_from_dekois.txt'),
+                                                  os.path.join(BLAST_MAIN_FOLDER, 'targets-dekois_blast.txt'))
     log('Finished reading BLAST outputs!')
     os.chdir(PROJECT_HOME)
 
@@ -141,7 +151,7 @@ if BLAST:
     blast_results['identity%_dekois'].fillna(0, inplace=True)
     blast_results['identity%_dude'].fillna(0, inplace=True)
     blast_results = blast_results[(blast_results['identity%_dekois'] <= MAX_BLAST_SIMILARITY) & (
-                blast_results['identity%_dude'] <= MAX_BLAST_SIMILARITY)]
+            blast_results['identity%_dude'] <= MAX_BLAST_SIMILARITY)]
     blast_ids = list(blast_results.index.tolist())
     source_csv = pd.read_csv(source_csv, index_col=0)
     source_csv = source_csv[source_csv["ChEMBL ID"].isin(blast_ids)]
@@ -157,11 +167,26 @@ if FILTER_ACTIVES:
     source_csv = pd.read_csv(FINAL_TABLE_PATH, index_col=0)
     ids = source_csv['ChEMBL ID'].tolist()
     acts = raab.load_activities()
-    for target in ids:
-        target_best_actives = raab.choose_best_actives(target_id=target,
-                                                       path_to_analog_matrix=join(SIMILARITY_MATRICES_FOLDER,
-                                                                                  f'{target}_AvA_similarity.csv'),
-                                                       acts_dataframe=acts,
-                                                       tc_threshold=ACTIVES_TC_SIMILARITY_THRESHOLD)
-        raab.filter_actives_smiles_file(target_id=target, best_actives=target_best_actives)
-        target_filtered_actives_path = os.path.join(CHEMBL_SMILES_FOLDER, f'{target}_filtered_active.smi')
+    if USE_JOBLIB:
+        from joblib import Parallel, delayed
+        log(f'Using JOBLIB with {JOBLIB_WORKERS} workers for actives filtering')
+        best_actives_set = Parallel(n_jobs=JOBLIB_WORKERS)(delayed(raab.choose_best_actives)(target_id=target,
+                                                                                             path_to_analog_matrix=join(
+                                                                                                 SIMILARITY_MATRICES_FOLDER,
+                                                                                                 f'{target}_AvA_similarity.csv'),
+                                                                                             acts_dataframe=acts,
+                                                                                             tc_threshold=ACTIVES_TC_SIMILARITY_THRESHOLD)
+                                                           for target in ids)
+        for ix in range(len(ids)):
+            raab.filter_actives_smiles_file(target_id=ids[ix], best_actives=best_actives_set[ix])
+            target_filtered_actives_path = os.path.join(CHEMBL_SMILES_FOLDER, f'{ids[ix]}_filtered_active.smi')
+
+    else:
+        for target in ids[-1]:
+            target_best_actives = raab.choose_best_actives(target_id=target,
+                                                           path_to_analog_matrix=join(SIMILARITY_MATRICES_FOLDER,
+                                                                                      f'{target}_AvA_similarity.csv'),
+                                                           acts_dataframe=acts,
+                                                           tc_threshold=ACTIVES_TC_SIMILARITY_THRESHOLD)
+            raab.filter_actives_smiles_file(target_id=target, best_actives=target_best_actives)
+            target_filtered_actives_path = os.path.join(CHEMBL_SMILES_FOLDER, f'{target}_filtered_active.smi')
