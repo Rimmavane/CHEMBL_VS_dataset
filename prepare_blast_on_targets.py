@@ -36,10 +36,10 @@ def fetch_fastas_for_chembl(csv_path, output):
         log(f'{output} already exists!')
 
 
-def fetch_fastas_for_DEKOIS(dekois_dir_path=DEKOIS_PATH):
-    if os.path.exists(os.path.join(dekois_dir_path, 'fastas_from_dekois.txt')):
+def fetch_fastas_for_DEKOIS():
+    if not os.path.exists(os.path.join(BLAST_MAIN_FOLDER, 'fastas_from_dekois.txt')):
         log('Starting fetching FASTA\' s for DEKOIS')
-        dekois_ligands, _ = DEKOIS_uniID_from_folder(dekois_dir_path)
+        dekois_ligands, _ = DEKOIS_uniID_from_folder(DEKOIS_PATH)
         dekois_ligands_uni_ids = set()
         for i in dekois_ligands:
             try:
@@ -47,7 +47,7 @@ def fetch_fastas_for_DEKOIS(dekois_dir_path=DEKOIS_PATH):
                     dekois_ligands_uni_ids.add(k)
             except KeyError:
                 log(f'No Uniprot ID for {i}')
-        with open('fastas_from_dekois.txt', 'w') as handle:
+        with open(os.path.join(BLAST_MAIN_FOLDER, 'fastas_from_dekois.txt'), 'w') as handle:
             for uniprot_id in dekois_ligands_uni_ids:
                 pdb_ids = get_pdbs_from_unicode(uniprot_id)
                 pdbs_dict = dict()
@@ -68,11 +68,11 @@ def fetch_fastas_for_DEKOIS(dekois_dir_path=DEKOIS_PATH):
         log('DEKOIS fastas already exists.')
 
 
-def fetch_fastas_for_DUDE(dude_dir_path=DUDE_PATH):
-    if os.path.exists(os.path.join(dude_dir_path, 'fastas_from_dude.txt')):
+def fetch_fastas_for_DUDE():
+    if not os.path.exists(os.path.join(BLAST_MAIN_FOLDER, 'fastas_from_dude.txt')):
         log(f'Starting fetching FASTA\'s for DUDE')
-        dude_uni_ids = DUDE_uniID_from_folder(dude_dir_path)
-        with open('fastas_from_dude.txt', 'w') as handle:
+        dude_uni_ids = DUDE_uniID_from_folder(DUDE_PATH)
+        with open(os.path.join(BLAST_MAIN_FOLDER, 'fastas_from_dude.txt'), 'w') as handle:
             for uniprot_id in dude_uni_ids:
                 pdb_ids = get_pdbs_from_unicode(uniprot_id)
                 pdbs_dict = dict()
@@ -162,11 +162,11 @@ def read_pdbbind_ids(file):
 
 
 def load_fasta_sequences(fasta_file1, fasta_file2, fasta1_to_fasta2_blast):
-    fasta_sequences = {''.join(filename.split('.')[:-1]): [[headerStr, seq] for headerStr, seq in read_fasta(filename)]
+    fasta_sequences = {''.join(os.path.split(filename)[-1].split('.')[:-1]): [[headerStr, seq] for headerStr, seq in read_fasta(filename)]
                        for filename in [fasta_file1, fasta_file2]}
     blast_results = load_blast_results(fasta1_to_fasta2_blast, [0, 1, 2])
     fasta_sources = list(fasta_sequences.keys())
-    output_name = '-'.join([fasta_sources[0], fasta_sources[1]])
+    output_name = '-'.join(['targets', f'{fasta_sources[1].split("_")[-1]}', 'blast'])
     cols = [v[0] for v in fasta_sequences[fasta_sources[0]]]
     rows = [v[0] for v in fasta_sequences[fasta_sources[1]]]
     values = pd.DataFrame(0.0, index=rows, columns=cols)
