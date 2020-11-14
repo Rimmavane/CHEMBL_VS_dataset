@@ -6,7 +6,7 @@ from rdkit.Chem import rdMolDescriptors
 import os
 import numpy as np
 from utils import make_fingerprint, log
-from pdb_query import get_pdb_fasta, get_ligands_for_PDB
+from pdb_query import get_pdb_fasta, get_ligands_for_PDB, check_if_pdb_xray
 from paths_and_settings import *
 
 
@@ -38,13 +38,14 @@ def get_ligands(pdbs, suffix=""):
                         pdb_to_ligands[pdb_id].append(lig)
                         smiles[lig] = ligs[lig]
                     failes = 0
+                    break
                 except:
                     failes += 1
-                    if failes > 20:
+                    if failes > 5:
                         log(f'Can\'t download ligand {pdb_id}, retried {failes} times.')
-                    continue
-                break
+                        break
             k += 1
+        assert len(smiles.keys()) == len(set(ligands))
         results[target] = [ligands, smiles]
         s += 1
     pickle.dump(results, open(os.path.join(COMPOUND_SAMPLING_FOLDER, f"ligands{suffix}.pkl"), "wb"))
@@ -132,7 +133,10 @@ def pdb_ligands_vs_chembl_ligands(pdbs, fingerprints, threshold=0.95, suffix="")
 
 
 def filter_ligands(all_ligands, threshold=100):
+    log(f'Weight threshold for ligand: {threshold}')
     for target in list(all_ligands.keys()):
+        s = 0
+        z = len(all_ligands[target][0])
         keys = set(all_ligands[target][0])
         for lig_name in keys:
             lig_smi = all_ligands[target][1][lig_name]
@@ -141,9 +145,11 @@ def filter_ligands(all_ligands, threshold=100):
             except:
                 lig_smi_weight = -1
                 log(f'Failed to count molecular weight for ligand {lig_name} with smile {lig_smi}')
-            if lig_smi_weight < threshold:
+            if int(lig_smi_weight) < threshold:
+                s += 1
                 all_ligands[target][0].remove(lig_name)
                 all_ligands[target][1].pop(lig_name, None)
+        log(f'Ligands left for {target}: {len(all_ligands[target][0])} left, {s} ({int(100*s/(z+0.1))} %) removed ')
         if len(all_ligands[target][0]) == 0:
             all_ligands.pop(target, None)
     return all_ligands
@@ -195,8 +201,9 @@ def update_master_table(master_table, results):
         pdbs = set()
         ligs = set()
         for each in results[target]:
-            pdbs.add(each[0])
-            ligs.add(each[1])
+            if check_if_pdb_xray(each[0]):
+                pdbs.add(each[0])
+                ligs.add(each[1])
         master_table.at[target, 'PDBs_number'] = len(pdbs)
         master_table.at[target, 'Ligand_number'] = len(ligs)
         new_pdbs = " ".join(list(pdbs))
@@ -218,6 +225,7 @@ def choose_primary_pdb_for_chembl(main_table):
             best_pdb = pdbs[fasta.index(best)]
             main_table.at[index, 'main_PDB_structure'] = best_pdb
     main_table = main_table.sort_values('Active_compounds', ascending=False).drop_duplicates(subset='main_PDB_structure')
+    main_table = main_table[main_table['main_PDB_structure'] != '']
     return main_table
 
 
