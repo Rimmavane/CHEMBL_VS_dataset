@@ -62,3 +62,15 @@ def read_fasta(fasta_path):
 
 def pandas_col_to_file(pandas_col, output_path):
     pandas_col.to_csv(output_path, index=False, header=False)
+
+
+def get_files_with_suffix(folder_path, suffix='_filtered_active.smi'):
+    """
+    Find all files with given suffix in specified folder, without recursion
+    :param folder_path: Folder we would like to search in
+    :param suffix: Suffix of files we want to find
+    :return: List of paths to files
+    """
+    files = [os.path.join(folder_path, i) for i in os.listdir(folder_path) if
+             os.path.isfile(os.path.join(folder_path, i)) and suffix in i]
+    return files

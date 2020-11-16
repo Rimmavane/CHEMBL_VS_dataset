@@ -63,10 +63,17 @@ E_VALUE_THRESHOLD = 0.00001   # float
 MAX_BLAST_SIMILARITY = 30  # sequences % similarity threshold between targets and best hits from DEKOIS/DUD-E
 
 # CRATING SIMILARITY MATRICES
-CREATE_ACTIVES_SIMILARITY_MATRICES = False
+CREATE_ACTIVES_SIMILARITY_MATRICES = True
 
 # REDUCING ANALOGUE BIAS AMONG ACTIVES
 FILTER_ACTIVES = True
 ACTIVES_TC_SIMILARITY_THRESHOLD = 0.9  # maximum Tanimoto similarity between compounds in active set
-USE_JOBLIB = True
+USE_JOBLIB = False
 JOBLIB_WORKERS = 4
+
+
+# DECOY SEARCHING
+# logp difference is calculated by abs(difference)-(1-(abs(chembl_ligands_logp)/10)), so for ligands with very low logp any hits were still possible
+# and it narrowed possible matches for ligands with very high logp
+# (because 20% from 0 would give 0, so that would be very rough threshold for logp, on the other hand 20% from 5 is less than 20% from 8 so the bigger the value the less added value it gets)
+THRESHOLDS_DICT = {'HBD': 0, 'HBA': 0, 'rotates': 0, 'weight': 0.15, 'logp': 0.2, 'murco_scaffold': 0.7}  # sample values

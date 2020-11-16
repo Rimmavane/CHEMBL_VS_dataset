@@ -23,10 +23,9 @@ class Prepare_Similarity:
     def execute(self):
         queries = self.queries
         subjects = self.subjects
-        log(f"Starting {self.name} queries and subjects")
+        log(f"Starting creating similarity matrix for {self.name}")
         queries = {i: make_fingerprint(queries[i], fp='fp2') for i in queries}
         subjects = {i: make_fingerprint(subjects[i], fp='fp2') for i in subjects}
-
         log(f"Made fingerprints for {self.name} queries and subjects")
         output = pd.DataFrame(index=list(queries.keys()), columns=list(subjects.keys()))
         output_path = os.path.join(self.storage, f'{self.name}.csv')
