@@ -30,6 +30,9 @@ job scheduling programs for spreading computations among more CPUs.
 
 ## Usage
 
+Sample data is availible for download here: https://drive.google.com/file/d/1FuJmz8I2rr7yjaOW6ZlOiv42FhiCSILN/view?usp=sharing
+Other data can be used as well but it should contain same named columns as in sample data.
+
 Scripts *paths_and_settings.py* and *run_pipeline.py* are used as the main part of managing the filtering process.
 *paths_and_settings.py* contains all major paths of input data as well as output data. 
 It is also where the filtering and decoy searching thresholds can be set by user.
