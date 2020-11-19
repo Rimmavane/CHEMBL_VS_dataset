@@ -1,4 +1,4 @@
-from os.path import isfile, basename
+from os.path import isfile, isdir, basename
 import pandas as pd
 import argparse
 import pickle
@@ -64,18 +64,9 @@ class Decoy_finder:
             descriptors['murco_scaffold'] = MACCSkeys.GenMACCSKeys(murco.GetScaffoldForMol(x))
         return descriptors
 
-    @staticmethod
-    def parse_dude_ism(file_path):
-        with open(file_path, 'r') as handle:
-            smiles = dict()
-            for line in handle:
-                l = line.strip().split()
-                smiles[l[-1]] = {'smile': l[0], 'fingerprint': make_fingerprint(l[0])}
-        return smiles
-
 
 class Chembl_loader(Decoy_finder):
-    def __init__(self, chembl_id, chembl_smi_path, decoy_folder_path, th_dict, max_decoys, output_folder='', ignore_pickled=True, randomize_ligands=True):
+    def __init__(self, chembl_source, chembl_smi_path, potential_decoys_path, th_dict, max_decoys, output_folder='', ignore_pickled=True, randomize_ligands=True):
         if output_folder == '':
             self.output_folder = join(PROJECT_HOME, 'found_decoys')
         else:
@@ -83,51 +74,72 @@ class Chembl_loader(Decoy_finder):
         super().__init__()
         self.global_start_time = time.time()
         self.chembl_smiles_path = str(chembl_smi_path)
-        self.decoy_base_folder_path = str(decoy_folder_path)
+        self.decoy_base_path = str(potential_decoys_path)
         self.threshold_dict = th_dict
         self.max_decoys_for_ligand = int(max_decoys)
-        self.chembl_id = str(chembl_id)
-        self.target_ids = [self.chembl_id]
+        if isfile(chembl_source):
+            self.chembl_id = pd.read_csv(chembl_source, index_col=0)['ChEMBL ID'].values.tolist()
+            self.target_ids = self.chembl_id
+        else:
+            self.chembl_id = str(chembl_source)
+            self.target_ids = [self.chembl_id]
 
-        self.filtered_chembl_active_files = [[target, join(self.chembl_smiles_path, f'{target}_filtered_active.smi')]
-                                             for target in self.target_ids]
+        self.filtered_chembl_active_files = {target: join(self.chembl_smiles_path, f'{target}_filtered_active.smi')
+                                             for target in self.target_ids}
         self.chembl_data = {target: dict() for target in self.target_ids}
 
         create_folder_if_not_existent(self.output_folder)
 
         checkpoint = time.time()
-        if not isfile(join(self.output_folder, f'{self.chembl_id}_descriptors_values.pkl')) or ignore_pickled is True:
-            for target, smile_file in self.filtered_chembl_active_files:
+
+        for target in self.target_ids:
+            if not isfile(join(self.output_folder, f'{target}_descriptors_values.pkl')) or ignore_pickled is True:
+                smile_file = self.filtered_chembl_active_files[target]
                 self.chembl_data[target] = self.load_chembl_ligands(smile_file)  # dict of targets as keys and list of compounds with smiles as values
                 self.chembl_data[target] = self.add_descriptors(self.chembl_data[target])  # add descriptors to compounds
-            self.save_chembl_descriptors()
-            log(f'Preparing targets took: {time.time() - checkpoint} s. Dumping them to csv.')
-            self.dump_to_csv()
-        else:
-            log(f'Found chembl descriptors files, loading them...')
-            self.chembl_data = pickle.load(open(join(self.output_folder, f'{self.chembl_id}_descriptors_values.pkl'), 'rb'))
+                self.save_chembl_descriptors(target)
+                log(f'Preparing target {target} took: {time.time() - checkpoint} s.')
+            else:
+                log(f'Found chembl descriptors files for {target}, loading them...')
+                self.chembl_data[target] = pickle.load(open(join(self.output_folder, f'{target}_descriptors_values.pkl'), 'rb'))
+        try:
+            assert set(self.chembl_data.keys()) == set(self.target_ids)
+        except AssertionError:
+            log(f'ChEMBL IDs of ligands sets loaded does not match ChEMBL IDs found in ChEMBL ISs source.')
+            diff = set(self.chembl_data.keys()) - set(self.target_ids) if len(set(self.chembl_data.keys())) > len(set(self.target_ids)) else set(self.target_ids) - set(self.chembl_data.keys())
+            log(f'The difference: {diff}')
+        log(f'Dumping them to csv.')
+        self.dump_to_csv()
 
-        log('Getting ZINC files paths')
-        self.zinc_database_smiles_files = get_files_with_suffix(self.decoy_base_folder_path, suffix='.smi')
+        log('Getting potential decoys files paths')
+        if isdir(self.decoy_base_path):
+            log(f'Found directory with potential decoys')
+            self.potential_decoys_smiles_files = get_files_with_suffix(self.decoy_base_path, suffix='.smi')
+        elif isfile(self.decoy_base_path):
+            log(f'Found file with potential decoys')
+            self.potential_decoys_smiles_files = [self.decoy_base_path]
+        else:
+            raise Exception('Could not find either file or folder with potential decoys.')
+
         x = len([(file, dict({target: self.chembl_data[target]})) for target in self.chembl_data
-                 for file in self.zinc_database_smiles_files])
+                 for file in self.potential_decoys_smiles_files])
         log(f'Number of tasks to do: {x}')
-        for file in self.zinc_database_smiles_files:
+        for file in self.potential_decoys_smiles_files:
             for target in self.chembl_data:
                 if randomize_ligands:  # randomize ligand order so if decoys are searched in many files the decoys found, which suffice thresholds for more than one active, will be spread more evenly
                     random_ligands = list(self.chembl_data[target].items())
                     random.shuffle(random_ligands)
                     self.chembl_data[target] = dict(random_ligands)
-                ZINC_comparer(chembl_id=target,
-                              decoys_file_path=file,
-                              chembl_data=dict({target: self.chembl_data[target]}),
-                              threshold_dict=self.threshold_dict,
-                              max_decoys=self.max_decoys_for_ligand,
-                              output_folder=self.output_folder)
+                Potential_decoys_comparer(chembl_id=target,
+                                          decoys_file_path=file,
+                                          chembl_data=dict({target: self.chembl_data[target]}),
+                                          threshold_dict=self.threshold_dict,
+                                          max_decoys=self.max_decoys_for_ligand,
+                                          output_folder=self.output_folder)
         log(f'Whole pipeline for {self.chembl_id} took {time.time() - self.global_start_time} s.')
 
-    def save_chembl_descriptors(self):
-        pickle.dump(self.chembl_data, open(join(self.output_folder, f'{self.chembl_id}_descriptors_values.pkl'), 'wb'))
+    def save_chembl_descriptors(self, target):
+        pickle.dump(self.chembl_data[target], open(join(self.output_folder, f'{target}_descriptors_values.pkl'), 'wb'))
 
     def dump_to_csv(self):
         cols = ['chembl_target_id', 'ligand_id', 'HBD', 'HBA', 'rotates', 'weight', 'logp']
@@ -142,7 +154,7 @@ class Chembl_loader(Decoy_finder):
                 r = [c_target, c_ligand] + r
                 output_csv.loc[index] = r
                 index += 1
-        output_csv.to_csv(join(self.output_folder, f'{self.chembl_id}_descriptors_values.csv'))
+        output_csv.to_csv(join(self.output_folder, f'descriptors_values.csv'))
 
     def get_chembl_ids_from_csv(self, csv_path):
         master_table = pd.read_csv(csv_path, index_col=0)
@@ -159,7 +171,7 @@ class Chembl_loader(Decoy_finder):
         return targets
 
 
-class ZINC_comparer(Decoy_finder):
+class Potential_decoys_comparer(Decoy_finder):
     def __init__(self, chembl_id, decoys_file_path, chembl_data, threshold_dict, max_decoys, output_folder):
         super().__init__()
         self.checkpoint = time.time()
@@ -215,7 +227,7 @@ class ZINC_comparer(Decoy_finder):
                     log(f'Currently processed {self.line_count} smiles from {self.file_name}.')
         if self.threshold_counts > 0:
             log(f'{self.threshold_counts} found for {self.chembl_id} in {self.file_name}')
-            self.dump_difference_to_csv(self.file_name, self.all_results)
+            self.dump_difference_to_csv(self.chembl_id, self.file_name, self.all_results)
             log(f'Saved potential decoys and CHEMBL ligands differences for {self.file_name}')
         else:
             message = f"No potential decoys found for {self.file_name}"
@@ -229,7 +241,7 @@ class ZINC_comparer(Decoy_finder):
         decoys_batch = self.add_descriptors(decoys_batch)
         return decoys_batch
 
-    def dump_difference_to_csv(self, filename, difference_dict):
+    def dump_difference_to_csv(self, chembl_id, filename, difference_dict):
         cols = ['target_id', 'ligand_id', 'zinc', 'ligand_smile', 'zinc_smile', 'HBD', 'HBA',
                 'rotates', 'weight', 'logp', 'murco_scaffold']
         output_csv = pd.DataFrame(columns=cols)
@@ -241,12 +253,7 @@ class ZINC_comparer(Decoy_finder):
                     r = [c_target, c_ligand, c_zinc] + r
                     output_csv.loc[index] = r
                     index += 1
-        if isfile(join(self.output_folder, f'{filename}_differences.csv')):
-            other_csv = pd.read_csv(join(self.output_folder, f'{filename}_differences.csv'), index_col=0)
-            concated = pd.concat([other_csv, output_csv]).drop_duplicates().reset_index(drop=True)
-            concated.to_csv(join(self.output_folder, f'{filename}_differences.csv'))
-        else:
-            output_csv.to_csv(join(self.output_folder, f'{filename}_differences.csv'))
+        output_csv.to_csv(join(self.output_folder, f'{chembl_id}_{filename}_differences.csv'))
 
     @staticmethod
     def compare_values(ligand_id, chembl_data_target, decoys_batch, threshold_dict):
@@ -295,17 +302,17 @@ class ZINC_comparer(Decoy_finder):
 
 
 parser = argparse.ArgumentParser()
-parser.add_argument('--decoys_path', default='raw_data/ZINC', help="Folder with ZINC files")
-parser.add_argument('--chembl_id', default='', help="Target for which the decoy search will be executed.")
+parser.add_argument('--chembl_source', help="Target ID or path to CSV with 'ChEMBL ID' column with Id's, for which the decoy search will be executed.")
 parser.add_argument('--chembl_smiles', default=CHEMBL_SMILES_FOLDER, help="Folder with CHEMBL ligands smiles. By default same as CHEMBL_SMILES_FOLDER parameter in path_and_settings script")
+parser.add_argument('--decoys_path', default='', help="Path to folder with potential decoys .smi file, or a certain .smi file.")
 parser.add_argument('--max_decoys', default=100, help="Max decoys for each ligand for a target per ZINC file")
-parser.add_argument('--output_folder', default='', help="Where to save found ")
+parser.add_argument('--output_folder', default='', help="Where to save found decoys")
 parser.add_argument('--ignore_pickled', type=lambda x: bool(distutils.util.strtobool(x)), default=True, help="Ignore pickled CHEMBL values  if found in destination folder and save anyway")
 parser.add_argument('--randomize_ligands', type=lambda x: bool(distutils.util.strtobool(x)), default=True, help="Randomize ligands order in actives set")
 
 if __name__ == '__main__':
     args = parser.parse_args()
-    assert args.chembl_id
+    assert args.chembl_source
 
-    Chembl_loader(chembl_id=args.chembl_id, chembl_smi_path=args.chembl_smiles, decoy_folder_path=args.decoys_path, th_dict=THRESHOLDS_DICT,
+    Chembl_loader(chembl_source=args.chembl_source, chembl_smi_path=args.chembl_smiles, potential_decoys_path=args.decoys_path, th_dict=THRESHOLDS_DICT,
                   max_decoys=args.max_decoys, output_folder=args.output_folder, ignore_pickled=args.ignore_pickled, randomize_ligands=args.randomize_ligands)

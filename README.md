@@ -53,12 +53,12 @@ python3 download_zinc.py -f ZINC_FILE -o OUTPUT_FOLDER
 ```
 
 *decoy_searching.py* script can be used from console as well, possible arguments are:
-- --chembl_id       - ChEMBL target id (ex. CHEMBL3784) - query smiles file is determined based on this id,
-    the script searches for <chembl_id>_filtered_active.smi file
+- --chembl_source   - Accpts single ChEMBL target id (ex. CHEMBL3784) or path to CSV file with 'ChEMBL ID' column form which IDs are retrieved - 
+    ligands smi file is found basing on this id, the script searches for <chembl_id>_filtered_active.smi file (or files)
 - --chembl_smiles   - folder in which to search for <chembl_id>_filtered_active.smi file, 
     if it don't exists it will be created. By default same as CHEMBL_SMILES_FOLDER parameter in *path_and_settings.py* script
-- --decoys_path     - folder with .smi files - all .smi files found in this folder will be 
-    considered as files with potential decoys
+- --decoys_path     - folder with .smi files or path to a single .smi file - if folder given, all .smi files found in 
+    this folder will be considered as files with potential decoys
 - --output_folder   - where to save results of decoy searching, there will be CSV file 
     for each file found in --decoys_path
 - --max_decoys      - how many potential decoys can be assigned to a single ligand in each potential decoys file,
@@ -71,7 +71,7 @@ python3 download_zinc.py -f ZINC_FILE -o OUTPUT_FOLDER
 Descriptors thresholds and LogP adaptive thresholding for decoy searching can be set in *paths_and_settings.py* script.
 
 ```bash
-python3 decoy_searching.py --chembl_id TARGET_ID --chembl_smiles CHEMBL_SMILES_FOLDER --decoys_path FOLDER_WITH_SMI_FILES --output_folder OUTPUT_FOLDER --max_decoys MAX_DECOYS_PER_LIGAND_PER_FILE --ignore_pickled True/False --randomize_ligands True/False
+python3 decoy_searching.py --chembl_source TARGET_ID --chembl_smiles CHEMBL_SMILES_FOLDER --decoys_path FOLDER_WITH_SMI_FILES --output_folder OUTPUT_FOLDER --max_decoys MAX_DECOYS_PER_LIGAND_PER_FILE --ignore_pickled True/False --randomize_ligands True/False
 ```
 Found decoys are saved to files with 'differences.csv' suffix.
 
