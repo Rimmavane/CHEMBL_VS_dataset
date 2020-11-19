@@ -47,33 +47,53 @@ SIMILARITY_MATRICES_FOLDER = join(PROJECT_HOME, 'similarity_matrices')
 create_folder_if_not_existent(SIMILARITY_MATRICES_FOLDER)
 
 # FILTERING ARGUMENTS
-INITIAL_FILTER = True
+INITIAL_FILTER = False
 ACTIVITY_VALUE_THRESHOLD = 10  # in nM
 
-SAMPLING_FILTER = True
-LIGAND_WEIGHT_LOWER_THRESHOLD = 100  # int
+SAMPLING_FILTER = False
+PDB_LIGANDS_WEIGHT_LOWER_THRESHOLD = 100  # int
 LOWEST_TC_SIMILARITY_BETWEEN_LIGANDS_THRESHOLD = (0.95,)    # a tuple
 LOWER_LIMIT_OF_LIGANDS = (50,)  # a tuple
 
 # BLAST ARGUMENTS
-BLAST = True
+BLAST = False
 CHOSEN_TC_THRESHOLD = 0.95  # float
 CHOSEN_LIGAND_LIMIT = 50    # int
 E_VALUE_THRESHOLD = 0.00001   # float
 MAX_BLAST_SIMILARITY = 30  # sequences % similarity threshold between targets and best hits from DEKOIS/DUD-E
 
 # CRATING SIMILARITY MATRICES
-CREATE_ACTIVES_SIMILARITY_MATRICES = True
+CREATE_ACTIVES_SIMILARITY_MATRICES = False
 
 # REDUCING ANALOGUE BIAS AMONG ACTIVES
-FILTER_ACTIVES = True
+FILTER_ACTIVES = False
 ACTIVES_TC_SIMILARITY_THRESHOLD = 0.9  # maximum Tanimoto similarity between compounds in active set
 USE_JOBLIB = False
 JOBLIB_WORKERS = 4
 
 
 # DECOY SEARCHING
-# logp difference is calculated by abs(difference)-(1-(abs(chembl_ligands_logp)/10)), so for ligands with very low logp any hits were still possible
-# and it narrowed possible matches for ligands with very high logp
-# (because 20% from 0 would give 0, so that would be very rough threshold for logp, on the other hand 20% from 5 is less than 20% from 8 so the bigger the value the less added value it gets)
+# Legend:
+# 'HBD'           : max_difference,
+# 'HBA'           : max_difference,
+# 'rotates'       : max_difference,
+# 'weight'        : max_query_weight_%_difference,
+# 'logp'          : max_query_logp_%_difference,
+# 'murco_scaffold': max_similarity_value
 THRESHOLDS_DICT = {'HBD': 0, 'HBA': 0, 'rotates': 0, 'weight': 0.15, 'logp': 0.2, 'murco_scaffold': 0.7}  # sample values
+
+SOFT_LOGP_THRESHOLDS = True
+SOFT_LOGP_PARAMETER = 4
+# if SOFT_LOGP_THRESHOLDS IS True
+# logp acceptation is calculated by abs(difference)-(1-(abs(chembl_ligand_logp)/SOFT_LOGP_PARAMETER)), and if the result is <0 it is considered ok,
+# so for ligands with very low logp any hits were still possible and it narrowed possible matches for ligands with very high logp
+# ligands with logp lower between -SOFT_LOGP_PARAMETER, to SOFT_LOGP_PARAMETER will be benefiting from this rule (broadening the acceptance interval),
+# and <-SOFT_LOGP_PARAMETER and >SOFT_LOGP_PARAMETER will be penalized (narrowing down their acceptance interval)
+# soft threshold does not influence the logp difference value saved to a file, it is applied only during comparing difference with threshold
+
+
+# POST-PROCESS FOUND DECOYS
+FILTER_FOUND_DECOYS = False
+FOUND_DECOYS_FOLDER = join(PROJECT_HOME, 'found_decoys')
+FOUND_DECOYS_CSV = join(FOUND_DECOYS_FOLDER, 'all_decoys_found.csv')
+DECOYS_PER_LIGAND = 100

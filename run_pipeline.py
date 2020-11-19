@@ -7,6 +7,7 @@ from paths_and_settings import *
 import prepare_targets_csv
 import sample_targets_by_activity
 import prepare_blast_on_targets
+import get_best_found_decoys
 from utils import log
 import prepare_similarity
 import reduce_actives_analogue_bias as raab
@@ -105,10 +106,10 @@ if INITIAL_FILTER:
 
 if SAMPLING_FILTER:
     log(f'Starting sampling targets with attributes: activity threshold {LOWER_LIMIT_OF_LIGANDS}, Tanimoto similarity'
-        f' thresholds: {LOWEST_TC_SIMILARITY_BETWEEN_LIGANDS_THRESHOLD}, PDB ligand frequency threshold: {LIGAND_WEIGHT_LOWER_THRESHOLD}')
+        f' thresholds: {LOWEST_TC_SIMILARITY_BETWEEN_LIGANDS_THRESHOLD}, PDB ligand weight lower threshold: {PDB_LIGANDS_WEIGHT_LOWER_THRESHOLD}')
     sample_targets_by_activity.sample_by_activity(activity_threshold=LOWER_LIMIT_OF_LIGANDS,
                                                   thresholds=LOWEST_TC_SIMILARITY_BETWEEN_LIGANDS_THRESHOLD,
-                                                  ligand_threshold=LIGAND_WEIGHT_LOWER_THRESHOLD)
+                                                  ligand_threshold=PDB_LIGANDS_WEIGHT_LOWER_THRESHOLD)
 
 # uses sample_targets_by_activity
 if BLAST:
@@ -190,3 +191,11 @@ if FILTER_ACTIVES:
                                                            tc_threshold=ACTIVES_TC_SIMILARITY_THRESHOLD)
             raab.filter_actives_smiles_file(target_id=target, best_actives=target_best_actives)
             target_filtered_actives_path = os.path.join(CHEMBL_SMILES_FOLDER, f'{target}_filtered_active.smi')
+
+### AFTER DECOY SEARCHING
+
+if FILTER_FOUND_DECOYS:
+    _ = get_best_found_decoys.concat_found_decoys_results(FOUND_DECOYS_FOLDER)
+    _ = get_best_found_decoys.add_tanimoto_score(FOUND_DECOYS_CSV)
+    _ = get_best_found_decoys.sort_by_tanimoto(FOUND_DECOYS_CSV)
+    get_best_found_decoys.filter_top_hits(FOUND_DECOYS_CSV, top=DECOYS_PER_LIGAND)

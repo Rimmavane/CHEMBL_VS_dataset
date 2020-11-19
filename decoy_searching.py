@@ -2,6 +2,7 @@ from os.path import isfile, basename
 import pandas as pd
 import argparse
 import pickle
+import random
 from utils import log, get_files_with_suffix, make_fingerprint
 from paths_and_settings import *
 
@@ -74,7 +75,7 @@ class Decoy_finder:
 
 
 class Chembl_loader(Decoy_finder):
-    def __init__(self, chembl_id, chembl_smi_path, decoy_folder_path, th_dict, max_decoys, output_folder='', ignore_pickled=True):
+    def __init__(self, chembl_id, chembl_smi_path, decoy_folder_path, th_dict, max_decoys, output_folder='', ignore_pickled=True, randomize_ligands=True):
         if output_folder == '':
             self.output_folder = join(PROJECT_HOME, 'found_decoys')
         else:
@@ -113,17 +114,20 @@ class Chembl_loader(Decoy_finder):
         log(f'Number of tasks to do: {x}')
         for file in self.zinc_database_smiles_files:
             for target in self.chembl_data:
+                if randomize_ligands:  # randomize ligand order so if decoys are searched in many files the decoys found, which suffice thresholds for more than one active, will be spread more evenly
+                    random_ligands = list(self.chembl_data[target].items())
+                    random.shuffle(random_ligands)
+                    self.chembl_data[target] = dict(random_ligands)
                 ZINC_comparer(chembl_id=target,
                               decoys_file_path=file,
                               chembl_data=dict({target: self.chembl_data[target]}),
                               threshold_dict=self.threshold_dict,
                               max_decoys=self.max_decoys_for_ligand,
                               output_folder=self.output_folder)
-
         log(f'Whole pipeline for {self.chembl_id} took {time.time() - self.global_start_time} s.')
 
     def save_chembl_descriptors(self):
-        pickle.dump(self.chembl_data, open(join('found_decoys', f'{self.chembl_id}_descriptors_values.pkl'), 'wb'))
+        pickle.dump(self.chembl_data, open(join(self.output_folder, f'{self.chembl_id}_descriptors_values.pkl'), 'wb'))
 
     def dump_to_csv(self):
         cols = ['chembl_target_id', 'ligand_id', 'HBD', 'HBA', 'rotates', 'weight', 'logp']
@@ -158,6 +162,7 @@ class Chembl_loader(Decoy_finder):
 class ZINC_comparer(Decoy_finder):
     def __init__(self, chembl_id, decoys_file_path, chembl_data, threshold_dict, max_decoys, output_folder):
         super().__init__()
+        self.checkpoint = time.time()
         self.max_decoys_for_ligand = max_decoys
         self.output_folder = output_folder
 
@@ -178,7 +183,6 @@ class ZINC_comparer(Decoy_finder):
         self.find_decoys(chembl_data, threshold_dict)
 
     def find_decoys(self, chembl_data, threshold_dict):
-        self.checkpoint = time.time()
         with open(self.zinc_file_path, 'r') as handle:
             handle.readline()
             for line in handle:  # read smile by smile
@@ -259,7 +263,7 @@ class ZINC_comparer(Decoy_finder):
             difference['HBA']            = target_from['HBA'] - target_to['HBA']
             difference['rotates']        = target_from['rotates'] - target_to['rotates']
             difference['weight']         = (target_from['weight'] - target_to['weight'])/target_from['weight']
-            difference['logp']           = (target_from['logp'] - target_to['logp'])/(target_from['logp'])
+            difference['logp']           = (target_from['logp'] - target_to['logp'])/(0.001 + target_from['logp'])
             difference['murco_scaffold'] = DataStructs.FingerprintSimilarity(target_from['murco_scaffold'],
                                                                              target_to['murco_scaffold'])
             for i in difference:    # compare differences with thresholds
@@ -268,9 +272,14 @@ class ZINC_comparer(Decoy_finder):
                         good = 0
                         break
                 elif i in ['logp']:
-                    if abs(difference[i])-(1-(abs(target_from['logp'])/10)) > threshold_dict[i]:
-                        good = 0
-                        break
+                    if SOFT_LOGP_THRESHOLDS:
+                        if abs(difference[i])-(1-(abs(target_from['logp'])/SOFT_LOGP_PARAMETER)) > threshold_dict[i]:   # adaptive comparison
+                            good = 0
+                            break
+                    else:
+                        if abs(difference[i]) > threshold_dict[i]:  # hard comaprison
+                            good = 0
+                            break
                 else:
                     dif = threshold_dict[i] - abs(difference[i])  # HBD, HBA, rotates, murco_scaffold
                     if dif < 0:
@@ -288,14 +297,15 @@ class ZINC_comparer(Decoy_finder):
 parser = argparse.ArgumentParser()
 parser.add_argument('--decoys_path', default='raw_data/ZINC', help="Folder with ZINC files")
 parser.add_argument('--chembl_id', default='', help="Target for which the decoy search will be executed.")
-parser.add_argument('--chembl_smiles', default=CHEMBL_SMILES_FOLDER, help="Folder with CHEMBL ligands smiles")
+parser.add_argument('--chembl_smiles', default=CHEMBL_SMILES_FOLDER, help="Folder with CHEMBL ligands smiles. By default same as CHEMBL_SMILES_FOLDER parameter in path_and_settings script")
 parser.add_argument('--max_decoys', default=100, help="Max decoys for each ligand for a target per ZINC file")
 parser.add_argument('--output_folder', default='', help="Where to save found ")
-parser.add_argument('--ignore_pickled', type=lambda x: bool(distutils.util.strtobool(x)), default=True, help="Ignore pickled CHEMBL values save if found in dest folder?")
+parser.add_argument('--ignore_pickled', type=lambda x: bool(distutils.util.strtobool(x)), default=True, help="Ignore pickled CHEMBL values  if found in destination folder and save anyway")
+parser.add_argument('--randomize_ligands', type=lambda x: bool(distutils.util.strtobool(x)), default=True, help="Randomize ligands order in actives set")
 
 if __name__ == '__main__':
     args = parser.parse_args()
     assert args.chembl_id
 
     Chembl_loader(chembl_id=args.chembl_id, chembl_smi_path=args.chembl_smiles, decoy_folder_path=args.decoys_path, th_dict=THRESHOLDS_DICT,
-                  max_decoys=args.max_decoys, output_folder=args.output_folder, ignore_pickled=args.ignore_pickled)
+                  max_decoys=args.max_decoys, output_folder=args.output_folder, ignore_pickled=args.ignore_pickled, randomize_ligands=args.randomize_ligands)
