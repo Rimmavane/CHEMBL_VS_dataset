@@ -45,6 +45,7 @@ class Decoy_finder:
         - total hydrogen bond donors (HBDs),
         - total hydrogen bond acceptors (HBAs),
         - octanol–water partition coefficient (log P)
+        :param fp: Fingerprint type (fp2, maccs, morg2)
         :param smile: SMILE representation of compound
         :aram fp: Fingerprint type to use, 'fp2', 'morg2' and 'maccs' are availible
         :return: Dictionary with physical descriptors of smile
@@ -155,11 +156,6 @@ class Chembl_loader(Decoy_finder):
                 output_csv.loc[index] = r
                 index += 1
         output_csv.to_csv(join(self.output_folder, f'descriptors_values.csv'))
-
-    def get_chembl_ids_from_csv(self, csv_path):
-        master_table = pd.read_csv(csv_path, index_col=0)
-        targets = master_table.index.tolist()
-        return targets
 
     def load_chembl_ligands(self, smiles_path):
         """
